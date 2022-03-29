@@ -34,6 +34,7 @@ type trelloFS struct {
 
 	inodes     []*inode
 	freeInodes []fuseops.InodeID
+	byID       map[string]fuseops.InodeID
 
 	Clock timeutil.Clock
 
@@ -127,6 +128,9 @@ func (fs *trelloFS) ReadDir(
 	if inode == nil {
 		log.Fatalf(fmt.Sprintf("unknown inode %d", op.Inode))
 	}
-	op.BytesRead = inode.ReadDir(op.Dst, int(op.Offset))
+	if inode.ShouldUpdate() {
+		new, removed, err := inode.Update(fs.ctx)
+	}
+	op.BytesRead = inode.ReadDir(op.Dst, int(op.Offset), fs.ctx)
 	return nil
 }
