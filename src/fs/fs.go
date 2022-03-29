@@ -16,6 +16,7 @@ import (
 	"os"
 	"sync"
 	"time"
+	"trellofs/trello"
 
 	"github.com/jacobsa/fuse"
 	"github.com/jacobsa/fuse/fuseops"
@@ -35,14 +36,21 @@ type trelloFS struct {
 	freeInodes []fuseops.InodeID
 
 	Clock timeutil.Clock
+
+	ctx *trello.TrelloCtx
 }
 
-func NewTrelloFS(uid uint32, gid uint32) (fuse.Server, error) {
+func NewTrelloFS(
+	uid uint32,
+	gid uint32,
+	ctx *trello.TrelloCtx,
+) (fuse.Server, error) {
 	fs := &trelloFS{
 		uid:    uid,
 		gid:    gid,
 		inodes: make([]*inode, fuseops.RootInodeID+1),
 		Clock:  timeutil.RealClock(),
+		ctx:    ctx,
 	}
 
 	rootAttrs := fuseops.InodeAttributes{

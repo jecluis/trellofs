@@ -15,12 +15,15 @@ import (
 	"log"
 	"os/user"
 	"strconv"
+	"trellofs/config"
 	"trellofs/fs"
+	"trellofs/trello"
 
 	"github.com/jacobsa/fuse"
 )
 
 var fMountPoint = flag.String("mount", "", "Path to Mount point.")
+var fConfigFile = flag.String("config", "", "Path to config file.")
 
 func main() {
 
@@ -28,6 +31,8 @@ func main() {
 
 	if *fMountPoint == "" {
 		log.Fatalf("Must provide mount point via '--mount'")
+	} else if *fConfigFile == "" {
+		log.Fatalf("Must provide config file via '--config'")
 	}
 
 	user, err := user.Current()
@@ -44,7 +49,13 @@ func main() {
 		panic(err)
 	}
 
-	trelloFS, err := fs.NewTrelloFS(uint32(uid), uint32(gid))
+	config, err := config.ReadConfig(*fConfigFile)
+	if err != nil {
+		panic(err)
+	}
+
+	trelloCtx := trello.Trello(config.ID, config.Key, config.Token)
+	trelloFS, err := fs.NewTrelloFS(uint32(uid), uint32(gid), trelloCtx)
 	if err != nil {
 		panic(err)
 	}
