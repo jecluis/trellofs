@@ -10,9 +10,12 @@
 package trello
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -50,7 +53,39 @@ func (t *TrelloCtx) NewRequest(
 	return req, nil
 }
 
+func doTestAPIGet(endpoint string) ([]byte, error) {
+	if strings.HasPrefix(endpoint, "https://api.trello.com/1/") {
+		return nil, errors.New(
+			fmt.Sprintf("improper endpoint for GET: %s", endpoint),
+		)
+	}
+	lst := strings.Split(endpoint, "?")
+	ep := lst[0]
+	if strings.HasPrefix(ep, "/") {
+		ep = strings.TrimPrefix(ep, "/")
+	}
+	if ep == "" {
+		return nil, errors.New("empty endpoint")
+	}
+	fn := strings.ReplaceAll(ep, "/", "-")
+	tdir := os.Getenv("TRELLOFS_TEST")
+	testfn := fmt.Sprintf("%s/%s.json", tdir, fn)
+	if _, err := os.Stat(testfn); errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+
+	contents, err := ioutil.ReadFile(testfn)
+	if err != nil {
+		return nil, err
+	}
+	return contents, nil
+}
+
 func (t *TrelloCtx) ApiGet(endpoint string) ([]byte, error) {
+
+	if os.Getenv("TRELLOFS_TEST") != "" {
+		return doTestAPIGet(endpoint)
+	}
 
 	req, err := t.NewRequest("GET", endpoint, nil)
 	if err != nil {
