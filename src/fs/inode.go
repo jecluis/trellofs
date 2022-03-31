@@ -11,6 +11,7 @@ package fs
 
 import (
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"sync"
@@ -43,6 +44,12 @@ type inode struct {
 	children     []*inode
 	childrenByID map[string]*inode
 	dentries     []fuseutil.Dirent
+
+	trelloCtx *trello.TrelloCtx
+	workspace trello.Workspace
+	board     trello.Board
+	list      trello.List
+	card      trello.Card
 
 	lock sync.Mutex
 }
@@ -90,6 +97,30 @@ func (in *inode) ShouldUpdate() bool {
 	return doUpdate
 }
 
+func (in *inode) createChildInode(
+	name string,
+	trelloID string,
+	entityType trello.EntityType,
+	mode fs.FileMode,
+) *inode {
+	return &inode{
+		isRoot: false,
+		attrs: fuseops.InodeAttributes{
+			Nlink:  1,
+			Mode:   mode,
+			Uid:    in.attrs.Uid,
+			Gid:    in.attrs.Gid,
+			Mtime:  in.lastUpdate,
+			Crtime: in.lastUpdate,
+			Ctime:  in.lastUpdate,
+		},
+		name:         name,
+		entityType:   entityType,
+		trelloID:     trelloID,
+		childrenByID: map[string]*inode{},
+	}
+}
+
 func (in *inode) Update(
 	ctx *trello.TrelloCtx,
 ) ([]InodeRef, []InodeRef, error) {
@@ -119,28 +150,54 @@ func (in *inode) Update(
 				continue
 			}
 
-			newInode := &inode{
-				isRoot: false,
-				attrs: fuseops.InodeAttributes{
-					Nlink:  1,
-					Mode:   0700 | os.ModeDir,
-					Uid:    in.attrs.Uid,
-					Gid:    in.attrs.Gid,
-					Mtime:  in.lastUpdate,
-					Crtime: in.lastUpdate,
-					Ctime:  in.lastUpdate,
-				},
-				name:         ws.Name,
-				entityType:   trello.TYPE_WORKSPACE,
-				trelloID:     ws.ID,
-				childrenByID: map[string]*inode{},
-			}
+			newInode := in.createChildInode(
+				ws.Name, ws.ID, trello.TYPE_WORKSPACE, 0700|os.ModeDir,
+			)
 			newChildren = append(newChildren, InodeRef{
 				ID:    ws.ID,
 				Inode: newInode,
 			})
 			in.childrenByID[ws.ID] = newInode
 			tmpChildren = append(tmpChildren, newInode)
+			newInode.workspace = ws
+			newInode.trelloCtx = ctx
+		}
+		in.children = tmpChildren
+		return newChildren, nil, nil
+
+	} else if in.entityType == trello.TYPE_WORKSPACE {
+
+		boards, err := in.workspace.GetBoards(in.trelloCtx)
+		if err != nil {
+			log.Printf(
+				"error updating boards for workspace %s (%s)",
+				in.name,
+				in.trelloID,
+			)
+		}
+		var tmpChildren []*inode
+		var newChildren []InodeRef
+		for _, board := range boards {
+			if in.childrenByID[board.ID] != nil {
+				log.Printf(
+					"update > board %s (%s) already exists, skip",
+					board.Name,
+					board.ID,
+				)
+				continue
+			}
+
+			newInode := in.createChildInode(
+				board.Name, board.ID, trello.TYPE_BOARD, 0700|os.ModeDir,
+			)
+			newChildren = append(newChildren, InodeRef{
+				ID:    board.ID,
+				Inode: newInode,
+			})
+			in.childrenByID[board.ID] = newInode
+			tmpChildren = append(tmpChildren, newInode)
+			newInode.board = board
+			newInode.trelloCtx = ctx
 		}
 		in.children = tmpChildren
 		return newChildren, nil, nil
