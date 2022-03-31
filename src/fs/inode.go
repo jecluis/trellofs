@@ -73,7 +73,9 @@ func (in *inode) isDir() bool {
 		in.entityType == trello.TYPE_WORKSPACE ||
 		in.entityType == trello.TYPE_BOARD ||
 		in.entityType == trello.TYPE_LIST ||
-		in.entityType == trello.TYPE_CARD)
+		in.entityType == trello.TYPE_CARD ||
+		in.entityType == trello.TYPE_BOARD_CARDS ||
+		in.entityType == trello.TYPE_BOARD_LISTS)
 }
 
 func (in *inode) isSymlink() bool {
@@ -201,6 +203,72 @@ func (in *inode) Update(
 			tmpChildren = append(tmpChildren, newInode)
 			newInode.board = board
 			newInode.trelloCtx = ctx
+		}
+		in.children = tmpChildren
+		return newChildren, nil, nil
+	} else if in.entityType == trello.TYPE_BOARD {
+		if len(in.children) > 0 {
+			return []InodeRef{}, nil, nil
+		}
+
+		var newChildren []InodeRef
+		for _, what := range []struct {
+			string
+			trello.EntityType
+		}{
+			{"card", trello.TYPE_BOARD_CARDS},
+			{"list", trello.TYPE_BOARD_LISTS},
+		} {
+			trelloID := fmt.Sprintf("%s/%s", in.trelloID, what.string)
+			newInode := in.createChildInode(
+				what.string, trelloID, what.EntityType, 0700|os.ModeDir,
+			)
+			newInode.board = in.board
+			in.children = append(in.children, newInode)
+			newChildren = append(newChildren, InodeRef{
+				ID:    trelloID,
+				Inode: newInode,
+			})
+			newInode.board = in.board
+			newInode.trelloCtx = in.trelloCtx
+		}
+		return newChildren, nil, nil
+	} else if in.entityType == trello.TYPE_BOARD_LISTS {
+
+		lists, err := in.board.GetLists(in.trelloCtx)
+		if err != nil {
+			log.Printf(
+				"update > error updating lists for board %s (%s)",
+				in.board.Name,
+				in.board.ID,
+			)
+			return nil, nil, err
+		}
+
+		var tmpChildren []*inode
+		var newChildren []InodeRef
+		for _, list := range lists {
+			if c, exists := in.childrenByID[list.ID]; exists {
+				log.Printf(
+					"update > list %s (%s) already exists, skip.",
+					list.Name,
+					list.ID,
+				)
+				tmpChildren = append(tmpChildren, c)
+				continue
+			}
+
+			newInode := in.createChildInode(
+				list.Name, list.ID, trello.TYPE_LIST, 0700|os.ModeDir,
+			)
+			newChildren = append(newChildren, InodeRef{
+				ID:    list.ID,
+				Inode: newInode,
+			})
+			in.childrenByID[list.ID] = newInode
+			tmpChildren = append(tmpChildren, newInode)
+			newInode.board = in.board
+			newInode.trelloCtx = in.trelloCtx
 		}
 		in.children = tmpChildren
 		return newChildren, nil, nil
