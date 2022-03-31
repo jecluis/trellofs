@@ -141,12 +141,13 @@ func (in *inode) Update(
 		var newChildren []InodeRef
 		for _, ws := range workspaces {
 
-			if in.childrenByID[ws.ID] != nil {
+			if c, exists := in.childrenByID[ws.ID]; exists {
 				log.Printf(
 					"update > workspace %s (%s) already exists, skip",
 					ws.DisplayName,
 					ws.ID,
 				)
+				tmpChildren = append(tmpChildren, c)
 				continue
 			}
 
@@ -174,16 +175,18 @@ func (in *inode) Update(
 				in.name,
 				in.trelloID,
 			)
+			return nil, nil, err
 		}
 		var tmpChildren []*inode
 		var newChildren []InodeRef
 		for _, board := range boards {
-			if in.childrenByID[board.ID] != nil {
+			if c, exists := in.childrenByID[board.ID]; exists {
 				log.Printf(
 					"update > board %s (%s) already exists, skip",
 					board.Name,
 					board.ID,
 				)
+				tmpChildren = append(tmpChildren, c)
 				continue
 			}
 
