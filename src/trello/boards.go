@@ -76,3 +76,28 @@ func (board *Board) GetLists(
 	}
 	return lists, nil
 }
+
+func (list *List) GetCards(
+	client *TrelloCtx,
+) ([]Card, error) {
+
+	endpoint := MakeEndpoint(
+		fmt.Sprintf("/lists/%s/cards", list.ID),
+		nil,
+	)
+	cardsRaw, err := client.ApiGet(endpoint)
+	if err != nil {
+		log.Printf(
+			"error obtaining cards for list %s (%s)",
+			list.Name, list.ID,
+		)
+		return nil, err
+	}
+
+	var cards []Card
+	json.Unmarshal(cardsRaw, &cards)
+	for _, c := range cards {
+		c.Board = list.Board
+	}
+	return cards, nil
+}
