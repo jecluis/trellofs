@@ -52,11 +52,12 @@ func (workspace *Workspace) GetBoards(
 	)
 	boardsRaw, err := ctx.ApiGet(boardsEndpoint)
 	if err != nil {
-		log.Printf("error obtaining orgs: %s\n", err)
+		log.Printf(
+			"error obtaining boards for workspace %s (%s): %s\n",
+			workspace.Name, workspace.ID, err,
+		)
 		return nil, err
 	}
-
-	// fmt.Println(string(boardsRaw))
 
 	var boards []Board
 	json.Unmarshal(boardsRaw, &boards)
