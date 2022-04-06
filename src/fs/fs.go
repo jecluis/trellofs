@@ -37,6 +37,9 @@ const (
 )
 
 type FSNode interface {
+	Lock()
+	Unlock()
+
 	ShouldUpdate() bool
 	Update() ([]FSNode, []FSNode, error) // (new, removed, error)
 	GetName() string
@@ -69,6 +72,14 @@ type BaseFSNode struct {
 	lastUpdate time.Time
 
 	Ctx *trello.TrelloCtx
+}
+
+func (base *BaseFSNode) Lock() {
+	base.lock.Lock()
+}
+
+func (base *BaseFSNode) Unlock() {
+	base.lock.Unlock()
 }
 
 func (base *BaseFSNode) GetName() string {
@@ -104,6 +115,8 @@ func (base *BaseFSNode) markUpdated() {
 }
 
 func (base *BaseFSNode) shouldUpdate(interval float64) bool {
+	base.Lock()
+	defer base.Unlock()
 	delta := time.Since(base.lastUpdate)
 	secs := delta.Seconds()
 	return secs >= interval
