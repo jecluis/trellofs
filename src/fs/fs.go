@@ -135,7 +135,24 @@ type FSList struct {
 	ByID   map[string]*FSCard
 	ByName map[string]*FSCard
 
-	List *trello.List
+	BoardNode *FSBoard
+	List      *trello.List
+}
+
+func (node *FSList) ShouldUpdate() bool {
+	return node.shouldUpdate(30.0)
+}
+
+func (node *FSList) Update() ([]FSNode, []FSNode, error) {
+	return nil, nil, fuse.ENOENT
+}
+
+func (node *FSList) LookupChild(name string) (FSNode, error) {
+	return nil, fuse.ENOENT
+}
+
+func (node *FSList) ReadDir(dst []byte, offset int) int {
+	return 0
 }
 
 type FSBoardCardsDirMeta struct {
@@ -163,7 +180,7 @@ func (node *FSBoardCardsDirMeta) ReadDir(dst []byte, offset int) int {
 type FSBoardListsDirMeta struct {
 	BaseFSNode
 
-	Board *FSBoard
+	BoardNode *FSBoard
 }
 
 func (node *FSBoardListsDirMeta) ShouldUpdate() bool {
@@ -171,15 +188,124 @@ func (node *FSBoardListsDirMeta) ShouldUpdate() bool {
 }
 
 func (node *FSBoardListsDirMeta) Update() ([]FSNode, []FSNode, error) {
-	return nil, nil, fuse.ENOENT
+	node.Lock()
+	defer node.Unlock()
+
+	log.Printf(
+		"update lists for board %s (%s)\n",
+		node.BoardNode.GetName(),
+		node.BoardNode.GetTrelloID(),
+	)
+
+	board := node.BoardNode.Board
+	lists, err := board.GetLists(node.BoardNode.Ctx)
+	if err != nil {
+		log.Printf(
+			"error updating lists for board %s (%s)\n",
+			node.BoardNode.GetName(),
+			node.BoardNode.GetTrelloID(),
+		)
+		return nil, nil, err
+	}
+
+	log.Printf(
+		"updating lists for board %s (%s)\n",
+		node.BoardNode.GetName(),
+		node.BoardNode.GetTrelloID(),
+	)
+
+	var newNodes []FSNode = make([]FSNode, 0)
+	for _, list := range lists {
+		if _, exists := node.BoardNode.ByListID[list.ID]; exists {
+			continue
+		}
+
+		newList := &FSList{
+			BaseFSNode: BaseFSNode{
+				name: list.Name,
+				uid:  node.uid,
+				gid:  node.gid,
+				NodeAttrs: fuseops.InodeAttributes{
+					Mode: 0700 | os.ModeDir,
+					Uid:  node.uid,
+					Gid:  node.gid,
+				},
+				isDir:    true,
+				NodeType: FSN_LIST,
+				TrelloID: list.ID,
+				Ctx:      node.BoardNode.Ctx,
+			},
+			ByID:      make(map[string]*FSCard),
+			ByName:    make(map[string]*FSCard),
+			BoardNode: node.BoardNode,
+			List:      &list,
+		}
+		newNodes = append(newNodes, newList)
+		node.BoardNode.Lists = append(node.BoardNode.Lists, newList)
+		node.BoardNode.ByListID[list.ID] = newList
+		node.BoardNode.ByListName[list.Name] = newList
+
+		log.Printf(
+			"new list %s (%s) on board %s (%s)\n",
+			newList.GetName(), newList.GetTrelloID(),
+			node.BoardNode.GetName(), node.BoardNode.GetTrelloID(),
+		)
+	}
+	node.markUpdated()
+	log.Printf(
+		"updated lists for board %s (%s): %d new nodes, %d total lists\n",
+		node.BoardNode.GetName(), node.BoardNode.GetTrelloID(),
+		len(newNodes), len(node.BoardNode.Lists),
+	)
+
+	return newNodes, nil, nil
 }
 
 func (node *FSBoardListsDirMeta) LookupChild(name string) (FSNode, error) {
+	node.Lock()
+	defer node.Unlock()
+
+	for _, list := range node.BoardNode.Lists {
+		if list.GetName() == name {
+			return list, nil
+		}
+	}
 	return nil, fuse.ENOENT
 }
 
 func (node *FSBoardListsDirMeta) ReadDir(dst []byte, offset int) int {
-	return 0
+	node.Lock()
+	defer node.Unlock()
+
+	log.Printf(
+		"read dir %s/%s (%s) id %d, offset %d\n",
+		node.BoardNode.GetName(),
+		node.GetName(), node.GetTrelloID(), node.GetNodeID(), offset,
+	)
+	var size int
+	for i := offset; i < len(node.BoardNode.Lists); i++ {
+		list := node.BoardNode.Lists[i]
+		tmp := fuseutil.WriteDirent(dst[size:], fuseutil.Dirent{
+			Name:   list.GetName(),
+			Inode:  list.GetNodeID(),
+			Type:   fuseutil.DT_Directory,
+			Offset: fuseops.DirOffset(i + 1),
+		})
+		if tmp == 0 {
+			log.Printf(
+				"read dir > no more space to write dirent for %s (%s)\n",
+				node.BoardNode.GetName(), node.BoardNode.GetTrelloID(),
+			)
+			break
+		}
+		log.Printf(
+			"read dir %s/%s id %d: wrote direntry for %s (%s) id %d\n",
+			node.BoardNode.GetName(), node.GetName(), node.GetNodeID(),
+			list.GetName(), list.GetTrelloID(), list.GetNodeID(),
+		)
+		size += tmp
+	}
+	return size
 }
 
 type FSBoard struct {
@@ -249,7 +375,7 @@ func (node *FSBoard) Update() ([]FSNode, []FSNode, error) {
 			TrelloID: fmt.Sprintf("%s/lists", node.GetTrelloID()),
 			Ctx:      node.Ctx,
 		},
-		Board: node,
+		BoardNode: node,
 	}
 	newNodes = append(newNodes, node.MetaCardsDir, node.MetaListsDir)
 	node.markUpdated()
@@ -377,6 +503,7 @@ func (node *FSWorkspace) Update() ([]FSNode, []FSNode, error) {
 			ByCardID:   make(map[string]*FSCard),
 			ByCardName: make(map[string]*FSCard),
 			ByListID:   make(map[string]*FSList),
+			ByListName: make(map[string]*FSList),
 			Board:      &boards[i],
 		}
 		newNodes = append(newNodes, newItem)
@@ -408,7 +535,7 @@ func (node *FSWorkspace) ReadDir(dst []byte, offset int) int {
 	node.lock.Lock()
 	defer node.lock.Unlock()
 
-	fmt.Printf(
+	log.Printf(
 		"read dir %s (%s) id %d, offset %d\n",
 		node.GetName(),
 		node.GetTrelloID(),
@@ -749,7 +876,7 @@ func (fs *trelloFS) ReadDir(
 	ctx context.Context,
 	op *fuseops.ReadDirOp,
 ) error {
-	log.Printf("read dir > %d\n", op.Inode)
+	log.Printf("read dir > id %d\n", op.Inode)
 
 	fs.lock.Lock()
 	defer fs.lock.Unlock()
