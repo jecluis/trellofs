@@ -47,11 +47,11 @@ func (board *Board) GetCards(ctx *TrelloCtx) ([]Card, error) {
 	}
 	var cards []Card
 	json.Unmarshal(cardsRaw, &cards)
-	for _, c := range cards {
-		c.Board = board
+	for idx, _ := range cards {
+		(&cards[idx]).Board = board
 	}
 
-	log.Println(string(cardsRaw))
+	// log.Println(string(cardsRaw))
 	return cards, nil
 }
 
