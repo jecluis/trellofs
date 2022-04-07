@@ -11,7 +11,9 @@ package fs
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"reflect"
@@ -53,6 +55,7 @@ type FSNode interface {
 	LookupChild(string) (FSNode, error)
 
 	ReadDir([]byte, int) int
+	ReadAt([]byte, int64) (int, error)
 }
 
 type BaseFSNode struct {
@@ -121,6 +124,10 @@ func (base *BaseFSNode) shouldUpdate(interval float64) bool {
 	delta := time.Since(base.lastUpdate)
 	secs := delta.Seconds()
 	return secs >= interval
+}
+
+func (base *BaseFSNode) ReadAt(dst []byte, offset int64) (int, error) {
+	return 0, nil
 }
 
 type MetaEntry struct {
@@ -212,6 +219,28 @@ func (node *FSCardMetaFile) ReadDir(dst []byte, offset int) int {
 	return 0
 }
 
+func (node *FSCardMetaFile) ReadAt(dst []byte, offset int64) (int, error) {
+
+	log.Printf(
+		"read file %s/%s meta %s, offset %d, len %d\n",
+		node.Card.Board.Name,
+		node.Card.Name,
+		node.GetName(),
+		offset, len(node.contents),
+	)
+
+	if offset > int64(len(node.contents)) {
+		return 0, io.EOF
+	}
+
+	n := copy(dst, node.contents[offset:])
+	if n < len(dst) {
+		return n, io.EOF
+	}
+
+	return n, nil
+}
+
 type FSCard struct {
 	BaseFSNode
 
@@ -257,9 +286,11 @@ func (node *FSCard) Update() ([]FSNode, []FSNode, error) {
 				uid:  node.uid,
 				gid:  node.gid,
 				NodeAttrs: fuseops.InodeAttributes{
-					Mode: 0600,
-					Uid:  node.uid,
-					Gid:  node.gid,
+					Mode:  0600,
+					Nlink: 1,
+					Uid:   node.uid,
+					Gid:   node.gid,
+					Size:  uint64(len(entry.Contents)),
 				},
 				isDir:    false,
 				NodeType: FSN_META,
@@ -1328,4 +1359,43 @@ func (fs *trelloFS) ReadDir(
 		op.BytesRead,
 	)
 	return nil
+}
+
+func (fs *trelloFS) OpenFile(
+	ctx context.Context,
+	op *fuseops.OpenFileOp,
+) error {
+	log.Printf("open file > id %d\n", op.Inode)
+	return nil
+}
+
+func (fs *trelloFS) ReadFile(
+	ctx context.Context,
+	op *fuseops.ReadFileOp,
+) error {
+	log.Printf("read file > id %d\n", op.Inode)
+
+	if op.OpContext.Pid == 0 {
+		return fuse.EINVAL
+	}
+
+	fs.lock.Lock()
+	defer fs.lock.Unlock()
+
+	if int(op.Inode) >= len(fs.inodes) {
+		panic(errors.New("Inode does not exist"))
+	}
+
+	node := fs.inodes[op.Inode]
+	bytes, err := node.ReadAt(op.Dst, op.Offset)
+
+	log.Printf(
+		"read file > read %s (%s) id %d, bytes: %d\n",
+		node.GetName(), node.GetTrelloID(), node.GetNodeID(), bytes,
+	)
+	op.BytesRead = bytes
+	if err == io.EOF {
+		return nil
+	}
+	return err
 }
