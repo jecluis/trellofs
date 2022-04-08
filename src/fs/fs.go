@@ -27,18 +27,6 @@ import (
 	"github.com/jacobsa/timeutil"
 )
 
-type FSNodeType int16
-
-const (
-	FSN_UNKNOWN FSNodeType = iota
-	FSN_META
-	FSN_CARD
-	FSN_LIST
-	FSN_BOARD
-	FSN_WORKSPACE
-	FSN_ROOT
-)
-
 type FSNode interface {
 	Lock()
 	Unlock()
@@ -46,7 +34,6 @@ type FSNode interface {
 	ShouldUpdate() bool
 	Update() ([]FSNode, []FSNode, error) // (new, removed, error)
 	GetName() string
-	GetNodeType() FSNodeType
 	GetTrelloID() string
 	GetNodeID() fuseops.InodeID
 	GetNodeAttrs() fuseops.InodeAttributes
@@ -70,7 +57,6 @@ type BaseFSNode struct {
 	NodeAttrs fuseops.InodeAttributes
 
 	isDir    bool
-	NodeType FSNodeType
 	TrelloID string
 
 	lastUpdate time.Time
@@ -96,10 +82,6 @@ func (base *BaseFSNode) GetNodeID() fuseops.InodeID {
 
 func (base *BaseFSNode) GetNodeAttrs() fuseops.InodeAttributes {
 	return base.NodeAttrs
-}
-
-func (base *BaseFSNode) GetNodeType() FSNodeType {
-	return base.NodeType
 }
 
 func (base *BaseFSNode) GetTrelloID() string {
@@ -293,7 +275,6 @@ func (node *FSCard) Update() ([]FSNode, []FSNode, error) {
 					Size:  uint64(len(entry.Contents)),
 				},
 				isDir:    false,
-				NodeType: FSN_META,
 				TrelloID: trelloID,
 			},
 			contents: entry.Contents,
@@ -423,7 +404,6 @@ func (node *FSList) Update() ([]FSNode, []FSNode, error) {
 						Gid:  node.gid,
 					},
 					isDir:    true,
-					NodeType: FSN_CARD,
 					TrelloID: card.ID,
 					Ctx:      node.Ctx,
 				},
@@ -558,7 +538,6 @@ func (node *FSBoardCardsDirMeta) Update() ([]FSNode, []FSNode, error) {
 					Gid:  node.gid,
 				},
 				isDir:    true,
-				NodeType: FSN_CARD,
 				TrelloID: card.ID,
 				Ctx:      node.Ctx,
 			},
@@ -689,7 +668,6 @@ func (node *FSBoardListsDirMeta) Update() ([]FSNode, []FSNode, error) {
 					Gid:  node.gid,
 				},
 				isDir:    true,
-				NodeType: FSN_LIST,
 				TrelloID: list.ID,
 				Ctx:      node.BoardNode.Ctx,
 			},
@@ -812,7 +790,6 @@ func (node *FSBoard) Update() ([]FSNode, []FSNode, error) {
 				Gid:  node.gid,
 			},
 			isDir:    true,
-			NodeType: FSN_META,
 			TrelloID: fmt.Sprintf("%s/cards", node.GetTrelloID()),
 			Ctx:      node.Ctx,
 		},
@@ -829,7 +806,6 @@ func (node *FSBoard) Update() ([]FSNode, []FSNode, error) {
 				Gid:  node.gid,
 			},
 			isDir:    true,
-			NodeType: FSN_META,
 			TrelloID: fmt.Sprintf("%s/lists", node.GetTrelloID()),
 			Ctx:      node.Ctx,
 		},
@@ -954,7 +930,6 @@ func (node *FSWorkspace) Update() ([]FSNode, []FSNode, error) {
 				gid:       node.gid,
 				NodeAttrs: newAttrs,
 				isDir:     true,
-				NodeType:  FSN_BOARD,
 				TrelloID:  board.ID,
 				Ctx:       node.Ctx,
 			},
@@ -1061,7 +1036,6 @@ func (node *TrelloTreeRoot) Update() ([]FSNode, []FSNode, error) {
 				gid:       node.gid,
 				NodeAttrs: newAttrs,
 				isDir:     true,
-				NodeType:  FSN_WORKSPACE,
 				TrelloID:  ws.ID,
 				Ctx:       node.Ctx,
 			},
@@ -1166,7 +1140,6 @@ func (fs *trelloFS) initRoot() FSNode {
 			NodeID:    fuseops.RootInodeID,
 			NodeAttrs: rootAttrs,
 			isDir:     true,
-			NodeType:  FSN_ROOT,
 			TrelloID:  "rootID",
 			Ctx:       fs.ctx,
 		},
