@@ -17,12 +17,12 @@ import (
 	"os"
 	"sync"
 	"time"
-	"trellofs/trello"
+
+	"github.com/jecluis/trellofs/src/trello"
 
 	"github.com/jacobsa/fuse"
 	"github.com/jacobsa/fuse/fuseops"
 	"github.com/jacobsa/fuse/fuseutil"
-	"github.com/jacobsa/timeutil"
 )
 
 type trelloFS struct {
@@ -38,8 +38,6 @@ type trelloFS struct {
 	inodes     []FSNode
 	freeInodes []fuseops.InodeID
 	byID       map[string]fuseops.InodeID
-
-	Clock timeutil.Clock
 
 	ctx *trello.TrelloCtx
 }
@@ -78,7 +76,6 @@ func NewTrelloFS(
 		gid:    gid,
 		inodes: make([]FSNode, fuseops.RootInodeID+1),
 		byID:   make(map[string]fuseops.InodeID),
-		Clock:  timeutil.RealClock(),
 		ctx:    ctx,
 	}
 	fs.inodes[fuseops.RootInodeID] = fs.initRoot()

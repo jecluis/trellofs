@@ -15,9 +15,10 @@ import (
 	"log"
 	"os/user"
 	"strconv"
-	"trellofs/config"
-	"trellofs/fs"
-	"trellofs/trello"
+
+	"github.com/jecluis/trellofs/src/config"
+	"github.com/jecluis/trellofs/src/fs"
+	"github.com/jecluis/trellofs/src/trello"
 
 	"github.com/jacobsa/fuse"
 )

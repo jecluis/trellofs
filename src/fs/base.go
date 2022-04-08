@@ -12,7 +12,8 @@ package fs
 import (
 	"sync"
 	"time"
-	"trellofs/trello"
+
+	"github.com/jecluis/trellofs/src/trello"
 
 	"github.com/jacobsa/fuse/fuseops"
 )

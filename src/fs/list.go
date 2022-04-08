@@ -12,7 +12,8 @@ package fs
 import (
 	"log"
 	"os"
-	"trellofs/trello"
+
+	"github.com/jecluis/trellofs/src/trello"
 
 	"github.com/jacobsa/fuse"
 	"github.com/jacobsa/fuse/fuseops"
