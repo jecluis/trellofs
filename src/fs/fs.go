@@ -766,8 +766,8 @@ func (node *FSBoard) ShouldUpdate() bool {
 }
 
 func (node *FSBoard) Update() ([]FSNode, []FSNode, error) {
-	node.lock.Lock()
-	defer node.lock.Unlock()
+	node.Lock()
+	defer node.Unlock()
 
 	log.Printf(
 		"update board %s (%s)\n",
@@ -820,8 +820,8 @@ func (node *FSBoard) Update() ([]FSNode, []FSNode, error) {
 }
 
 func (node *FSBoard) LookupChild(name string) (FSNode, error) {
-	node.lock.Lock()
-	defer node.lock.Unlock()
+	node.Lock()
+	defer node.Unlock()
 
 	var err error = fuse.ENOENT
 	var child FSNode = nil
@@ -842,8 +842,8 @@ func (node *FSBoard) LookupChild(name string) (FSNode, error) {
 }
 
 func (node *FSBoard) ReadDir(dst []byte, offset int) int {
-	node.lock.Lock()
-	defer node.lock.Unlock()
+	node.Lock()
+	defer node.Unlock()
 
 	fmt.Printf(
 		"read dir board %s (%s) id %d, offset %d\n",
@@ -889,8 +889,8 @@ func (node *FSWorkspace) ShouldUpdate() bool {
 }
 
 func (node *FSWorkspace) Update() ([]FSNode, []FSNode, error) {
-	node.lock.Lock()
-	defer node.lock.Unlock()
+	node.Lock()
+	defer node.Unlock()
 
 	log.Printf(
 		"update workspace %s (%s)\n",
@@ -918,20 +918,19 @@ func (node *FSWorkspace) Update() ([]FSNode, []FSNode, error) {
 			continue
 		}
 
-		newAttrs := fuseops.InodeAttributes{
-			Mode: 0700 | os.ModeDir,
-			Uid:  node.uid,
-			Gid:  node.gid,
-		}
 		newItem := &FSBoard{
 			BaseFSNode: BaseFSNode{
-				name:      board.Name,
-				uid:       node.uid,
-				gid:       node.gid,
-				NodeAttrs: newAttrs,
-				isDir:     true,
-				TrelloID:  board.ID,
-				Ctx:       node.Ctx,
+				name: board.Name,
+				uid:  node.uid,
+				gid:  node.gid,
+				NodeAttrs: fuseops.InodeAttributes{
+					Mode: 0700 | os.ModeDir,
+					Uid:  node.uid,
+					Gid:  node.gid,
+				},
+				isDir:    true,
+				TrelloID: board.ID,
+				Ctx:      node.Ctx,
 			},
 			ByCardID:   make(map[string]*FSCard),
 			ByCardName: make(map[string]*FSCard),
@@ -953,8 +952,8 @@ func (node *FSWorkspace) Update() ([]FSNode, []FSNode, error) {
 }
 
 func (node *FSWorkspace) LookupChild(name string) (FSNode, error) {
-	node.lock.Lock()
-	defer node.lock.Unlock()
+	node.Lock()
+	defer node.Unlock()
 
 	for _, board := range node.Boards {
 		if board.name == name {
@@ -965,8 +964,8 @@ func (node *FSWorkspace) LookupChild(name string) (FSNode, error) {
 }
 
 func (node *FSWorkspace) ReadDir(dst []byte, offset int) int {
-	node.lock.Lock()
-	defer node.lock.Unlock()
+	node.Lock()
+	defer node.Unlock()
 
 	log.Printf(
 		"read dir %s (%s) id %d, offset %d\n",
@@ -1009,8 +1008,8 @@ func (node *TrelloTreeRoot) ShouldUpdate() bool {
 
 func (node *TrelloTreeRoot) Update() ([]FSNode, []FSNode, error) {
 
-	node.lock.Lock()
-	defer node.lock.Unlock()
+	node.Lock()
+	defer node.Unlock()
 
 	workspaces, err := trello.GetWorkspaces(node.Ctx)
 	if err != nil {
@@ -1024,20 +1023,19 @@ func (node *TrelloTreeRoot) Update() ([]FSNode, []FSNode, error) {
 			continue
 		}
 
-		newAttrs := fuseops.InodeAttributes{
-			Mode: 0700 | os.ModeDir,
-			Uid:  node.uid,
-			Gid:  node.gid,
-		}
 		newItem := &FSWorkspace{
 			BaseFSNode: BaseFSNode{
-				name:      ws.Name,
-				uid:       node.uid,
-				gid:       node.gid,
-				NodeAttrs: newAttrs,
-				isDir:     true,
-				TrelloID:  ws.ID,
-				Ctx:       node.Ctx,
+				name: ws.Name,
+				uid:  node.uid,
+				gid:  node.gid,
+				NodeAttrs: fuseops.InodeAttributes{
+					Mode: 0700 | os.ModeDir,
+					Uid:  node.uid,
+					Gid:  node.gid,
+				},
+				isDir:    true,
+				TrelloID: ws.ID,
+				Ctx:      node.Ctx,
 			},
 			ByID:      make(map[string]*FSBoard),
 			ByName:    make(map[string]*FSBoard),
@@ -1064,8 +1062,8 @@ func (node *TrelloTreeRoot) Update() ([]FSNode, []FSNode, error) {
 
 func (node *TrelloTreeRoot) LookupChild(name string) (FSNode, error) {
 
-	node.lock.Lock()
-	defer node.lock.Unlock()
+	node.Lock()
+	defer node.Unlock()
 
 	for _, workspace := range node.workspaces {
 		if workspace.GetName() == name {
@@ -1076,8 +1074,8 @@ func (node *TrelloTreeRoot) LookupChild(name string) (FSNode, error) {
 }
 
 func (node *TrelloTreeRoot) ReadDir(dst []byte, offset int) int {
-	node.lock.Lock()
-	defer node.lock.Unlock()
+	node.Lock()
+	defer node.Unlock()
 
 	fmt.Printf(
 		"read dir %s (%s) id %d, offset %d\n",
